@@ -79,11 +79,23 @@ class Settings(BaseSettings):
 
     # --- Server ----------------------------------------------------------
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    # Optional regex, e.g. https://voyager-ai.*\.vercel\.app for preview URLs
+    cors_origin_regex: str | None = None
 
     @property
     def cors_origin_list(self) -> list[str]:
-        """CORS origins as a list."""
-        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+        """CORS origins as a list.
+
+        Tolerates common copy-paste slips: surrounding quotes, spaces,
+        semicolons and trailing slashes ("https://x.vercel.app/").
+        """
+        raw = self.cors_origins.replace(";", ",")
+        origins = []
+        for item in raw.split(","):
+            origin = item.strip().strip("\"'").strip().rstrip("/")
+            if origin:
+                origins.append(origin)
+        return origins
 
     @property
     def resolved_model(self) -> str:

@@ -46,3 +46,11 @@ def test_flight_or_hotel_id_in_place_field_keeps_activity():
     acts = _convert([ActivityDraft(place_id="PLC9999", title="Fake",
                                    description="x")], {}, set(), notes)
     assert acts == [] and notes
+
+
+def test_cors_origins_tolerate_copy_paste_slips(tmp_path):
+    env = tmp_path / ".env"
+    env.write_text('CORS_ORIGINS="https://a.vercel.app/ , http://localhost:5173;"\n',
+                   encoding="utf-8")
+    assert Settings(_env_file=env).cors_origin_list == [
+        "https://a.vercel.app", "http://localhost:5173"]
