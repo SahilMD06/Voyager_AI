@@ -107,6 +107,11 @@ Key design decisions:
   assembler rejects any flight/hotel/place id that the tools did not return,
   removes duplicates, fills omitted days, and recomputes the budget from
   dataset prices. Every correction is logged in the agent trace.
+- **Weather fallback.** Open-Meteo is the primary source. Cloud hosts share
+  outgoing IPs, which can exhaust Open-Meteo's free daily quota; then the
+  forecast comes from MET Norway (api.met.no, also keyless) and each day is
+  labelled with its source. Days neither source covers are shown as
+  unavailable, never invented.
 - **Model fallback.** If the main model fails (for example a free-tier
   rate limit, HTTP 429), the agent retries once with a lighter model
   (`gemini-3.5-flash-lite` by default, `LLM_FALLBACK_MODEL` in `.env`); the

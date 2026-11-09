@@ -29,7 +29,9 @@ type, amenities and nightly cap. Choose the best fit.
 5. Get the weather for the full date range.
 6. Call estimate_budget with your chosen flight ids, hotel id and every \
 place_id you schedule plus the user's budget. If it is over budget, try a \
-cheaper hotel or flight from the results you already have and re-estimate.
+cheaper hotel or flight from the results you already have and re-estimate. \
+Call estimate_budget at most twice, and call the other tools only once each \
+(two flight searches): every extra call costs time and API quota.
 7. Produce the final structured plan.
 
 Itinerary rules:

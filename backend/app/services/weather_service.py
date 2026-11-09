@@ -14,7 +14,9 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from datetime import date, timedelta
+from collections import Counter
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from app.config import get_settings
 from app.models.schemas import WeatherDay, WeatherResult
@@ -202,6 +204,74 @@ def _fetch_archive(lat: float, lon: float, start: date, end: date) -> dict:
     raise ExternalAPIError("; ".join(errors))
 
 
+MET_SYMBOLS: list[tuple[str, tuple[str, str]]] = [
+    ("thunder", ("Thunderstorm", "storm")),
+    ("snow", ("Snow", "snow")),
+    ("sleet", ("Sleet", "snow")),
+    ("heavyrain", ("Heavy rain", "rain")),
+    ("lightrain", ("Light rain", "drizzle")),
+    ("rain", ("Rain", "rain")),
+    ("fog", ("Fog", "fog")),
+    ("partlycloudy", ("Partly cloudy", "cloud-sun")),
+    ("cloudy", ("Overcast", "cloud")),
+    ("fair", ("Mainly clear", "sun")),
+    ("clearsky", ("Clear sky", "sun")),
+]
+
+
+def describe_met_symbol(symbol: str | None) -> tuple[str, str]:
+    """Translate a MET Norway symbol_code (e.g. 'lightrain_day')."""
+    if not symbol:
+        return ("Unknown", "unknown")
+    base = symbol.split("_")[0]
+    for key, value in MET_SYMBOLS:
+        if key in base:
+            return value
+    return (base.title(), "cloud")
+
+
+def _fetch_met_norway(lat: float, lon: float, tz_name: str | None) -> dict:
+    """Daily aggregates from MET Norway's hourly/6-hourly forecast."""
+    settings = get_settings()
+    key = f"met:{lat:.3f}:{lon:.3f}"
+    cached = _cached(key)
+    if cached is not None:
+        return cached
+    payload = get_json(settings.met_norway_url,
+                       {"lat": round(lat, 4), "lon": round(lon, 4)})
+    zone = ZoneInfo(tz_name) if tz_name else ZoneInfo("Asia/Kolkata")
+    days: dict[str, dict] = {}
+    for entry in payload.get("properties", {}).get("timeseries", []):
+        moment = datetime.fromisoformat(entry["time"].replace("Z", "+00:00"))
+        local_day = moment.astimezone(zone).date().isoformat()
+        data = entry.get("data", {})
+        bucket = days.setdefault(local_day, {"temps": [], "precip": 0.0,
+                                             "symbols": Counter()})
+        temp = data.get("instant", {}).get("details", {}).get(
+            "air_temperature")
+        if temp is not None:
+            bucket["temps"].append(float(temp))
+        nxt = data.get("next_1_hours") or data.get("next_6_hours") or {}
+        bucket["precip"] += float(
+            nxt.get("details", {}).get("precipitation_amount") or 0)
+        symbol = nxt.get("summary", {}).get("symbol_code")
+        if symbol:
+            bucket["symbols"][symbol.split("_")[0]] += 1
+    rows = {}
+    for day, bucket in days.items():
+        if len(bucket["temps"]) < 2:
+            continue  # too few readings to describe the day honestly
+        rows[day] = {
+            "temperature_2m_max": max(bucket["temps"]),
+            "temperature_2m_min": min(bucket["temps"]),
+            "precipitation_sum": round(bucket["precip"], 1),
+            "symbol": (bucket["symbols"].most_common(1)[0][0]
+                       if bucket["symbols"] else None),
+        }
+    _store(key, rows)
+    return rows
+
+
 def _one_year_earlier(day: date) -> date:
     try:
         return day.replace(year=day.year - 1)
@@ -247,14 +317,25 @@ def get_trip_weather(
     notes: list[str] = []
 
     forecast_rows: dict = {}
+    met_rows: dict = {}
     if forecast_days:
         try:
             forecast_rows = _fetch_forecast(
                 lat, lon, forecast_days[0], forecast_days[-1]
             )
         except ExternalAPIError as exc:
-            notes.append(f"Live forecast unavailable ({exc}).")
-            archive_days = trip_days  # try historical for everything
+            logger.warning("Open-Meteo forecast failed: %s", exc)
+            try:
+                met_rows = _fetch_met_norway(lat, lon,
+                                             location.get("timezone"))
+                notes.append(
+                    "Open-Meteo's free limit was reached, so forecast days "
+                    "come from MET Norway (api.met.no).")
+            except ExternalAPIError as met_exc:
+                notes.append(f"Live forecast unavailable ({exc}; MET Norway:"
+                             f" {met_exc}).")
+            archive_days = [d for d in trip_days
+                            if d.isoformat() not in met_rows]
 
     archive_rows: dict = {}
     if archive_days:
@@ -284,6 +365,19 @@ def get_trip_weather(
                 precipitation_mm=_round(row.get("precipitation_sum")),
                 source="forecast",
                 source_note="Open-Meteo live forecast",
+            ))
+            continue
+        row = met_rows.get(trip_day.isoformat())
+        if row:
+            label, icon = describe_met_symbol(row.get("symbol"))
+            days.append(WeatherDay(
+                date=trip_day, condition=label, icon=icon, weather_code=None,
+                temp_max_c=_round(row["temperature_2m_max"]),
+                temp_min_c=_round(row["temperature_2m_min"]),
+                precipitation_probability=None,
+                precipitation_mm=_round(row.get("precipitation_sum")),
+                source="forecast",
+                source_note="MET Norway forecast (Open-Meteo limit reached)",
             ))
             continue
         ref = _one_year_earlier(trip_day)

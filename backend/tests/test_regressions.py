@@ -54,3 +54,30 @@ def test_cors_origins_tolerate_copy_paste_slips(tmp_path):
                    encoding="utf-8")
     assert Settings(_env_file=env).cors_origin_list == [
         "https://a.vercel.app", "http://localhost:5173"]
+
+
+def test_met_norway_fallback_when_open_meteo_rate_limited(monkeypatch):
+    from datetime import date, timedelta
+    from app.services import weather_service as ws
+    from app.utils.http import ExternalAPIError
+
+    today = date.today()
+    monkeypatch.setattr(ws, "geocode_city", lambda city: {
+        "name": "Panjim", "admin1": "Goa", "latitude": 15.5,
+        "longitude": 73.8, "timezone": "Asia/Kolkata"})
+
+    def limited(*a, **k):
+        raise ExternalAPIError("HTTP 429: Daily API request limit exceeded")
+    monkeypatch.setattr(ws, "_fetch_forecast", limited)
+    monkeypatch.setattr(ws, "_fetch_archive", limited)
+    day = (today + timedelta(days=1)).isoformat()
+    monkeypatch.setattr(ws, "_fetch_met_norway", lambda *a: {
+        day: {"temperature_2m_max": 31.0, "temperature_2m_min": 24.0,
+              "precipitation_sum": 6.2, "symbol": "lightrain"}})
+    result = ws.get_trip_weather("Goa", today + timedelta(days=1),
+                                 today + timedelta(days=2), today=today)
+    first, second = result.days
+    assert first.source == "forecast" and "MET Norway" in first.source_note
+    assert first.condition == "Light rain" and first.temp_max_c == 31.0
+    assert second.source == "unavailable"  # never invented
+    assert "MET Norway" in result.note

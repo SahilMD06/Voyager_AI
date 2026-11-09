@@ -54,6 +54,11 @@ class Settings(BaseSettings):
     open_meteo_historical_forecast_url: str = (
         "https://historical-forecast-api.open-meteo.com/v1/forecast"
     )
+    # Keyless fallback forecast used only when Open-Meteo refuses (e.g. a
+    # shared cloud IP has exhausted its daily free quota).
+    met_norway_url: str = (
+        "https://api.met.no/weatherapi/locationforecast/2.0/compact"
+    )
     open_meteo_geocoding_url: str = (
         "https://geocoding-api.open-meteo.com/v1/search"
     )
