@@ -1,0 +1,109 @@
+@import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+
+/* ---------------------------------------------------------------------------
+   Voyager design tokens
+   Ink navy / monsoon slate / paper / sky / lagoon / marigold
+--------------------------------------------------------------------------- */
+@theme {
+  --color-ink: #0e2240;
+  --color-ink-2: #1a3358;
+  --color-slate: #3e5672;
+  --color-mist: #8a9bb0;
+  --color-line: #e3e7ec;
+  --color-paper: #faf9f6;
+  --color-cloud: #f1f4f7;
+  --color-sky: #4aa3e8;
+  --color-sky-soft: #e4f1fc;
+  --color-lagoon: #0f9c8f;
+  --color-lagoon-soft: #ddf3f0;
+  --color-marigold: #f2a93b;
+  --color-marigold-soft: #fdf1dc;
+  --color-alert: #c8473b;
+  --color-alert-soft: #fbe9e7;
+
+  --font-display: "Bricolage Grotesque Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --shadow-lift: 0 1px 2px rgb(14 34 64 / 0.06), 0 8px 24px -8px rgb(14 34 64 / 0.18);
+  --shadow-float: 0 24px 60px -20px rgb(14 34 64 / 0.45);
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-weight: 650;
+}
+
+:focus-visible {
+  outline: 2.5px solid var(--color-sky);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+::selection {
+  background: var(--color-sky-soft);
+}
+
+/* Boarding-pass perforation, used by the ticket components */
+.perforation {
+  position: relative;
+  background-image: radial-gradient(circle, var(--color-line) 1.5px, transparent 1.6px);
+  background-size: 10px 10px;
+  background-repeat: repeat-y;
+  background-position: center;
+}
+.ticket-notch::before,
+.ticket-notch::after {
+  content: "";
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--notch-bg, var(--color-paper));
+  left: 50%;
+  transform: translateX(-50%);
+}
+.ticket-notch::before { top: -13px; }
+.ticket-notch::after { bottom: -13px; }
+
+/* Route line with moving plane */
+@keyframes route-dash {
+  to { stroke-dashoffset: -24; }
+}
+.route-dash {
+  stroke-dasharray: 4 8;
+  animation: route-dash 1.4s linear infinite;
+}
+
+.leaflet-container {
+  font-family: var(--font-sans);
+  border-radius: 18px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .route-dash { animation: none; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media print {
+  nav, footer, .no-print { display: none !important; }
+}
